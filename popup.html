@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>YouTube Focus Mode</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Study Extension</p>
+          <h1>YouTube Focus Mode</h1>
+        </div>
+        <div class="header-actions">
+          <button id="openOptionsBtn" class="icon-btn small" type="button" title="Open dashboard" aria-label="Open dashboard">
+            <span aria-hidden="true">⚙</span>
+          </button>
+          <label class="mode-toggle" for="studyModeToggle" title="Toggle Study Mode">
+            <input id="studyModeToggle" type="checkbox" aria-label="Toggle Study Mode">
+            <span class="track">
+              <span class="thumb"></span>
+            </span>
+          </label>
+        </div>
+      </header>
+
+      <section class="status-panel">
+        <div>
+          <p id="modeLabel" class="mode-label">Study Mode OFF</p>
+          <p id="quoteText" class="quote">Small progress, repeated daily, becomes serious momentum.</p>
+        </div>
+      </section>
+
+      <section class="timer-panel">
+        <div class="progress-ring" aria-hidden="true">
+          <svg viewBox="0 0 120 120">
+            <circle class="ring-bg" cx="60" cy="60" r="52"></circle>
+            <circle id="timerProgressCircle" class="ring-fg" cx="60" cy="60" r="52"></circle>
+          </svg>
+          <span id="timerProgressLabel">100%</span>
+        </div>
+        <div class="timer-copy">
+          <p id="timerPhase" class="eyebrow">Focus</p>
+          <strong id="timerDisplay">25:00</strong>
+        </div>
+        <div class="timer-actions">
+          <button id="startPauseBtn" class="primary-btn" type="button">Start</button>
+          <button id="resetTimerBtn" class="icon-btn" type="button" title="Reset timer" aria-label="Reset timer">
+            <span aria-hidden="true">↻</span>
+          </button>
+          <button id="ambientBtn" class="icon-btn" type="button" title="Ambient sound" aria-label="Toggle ambient sound">
+            <span aria-hidden="true">♪</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="stats-grid" aria-label="Study stats">
+        <article class="stat-card">
+          <span>Total today</span>
+          <strong id="studyTimeToday">0m</strong>
+        </article>
+        <article class="stat-card">
+          <span>Avoided</span>
+          <strong id="avoidedTimeToday">0m</strong>
+        </article>
+        <article class="stat-card">
+          <span>Streak</span>
+          <strong id="streakCount">0 days</strong>
+        </article>
+        <article class="stat-card">
+          <span>XP</span>
+          <strong id="xpCount">0</strong>
+        </article>
+      </section>
+
+      <section class="settings-panel">
+        <div class="section-title">
+          <h2>Focus Rules</h2>
+          <span id="syncStatus">Saved</span>
+        </div>
+
+        <label class="setting-row">
+          <span>
+            <strong>Hide Shorts</strong>
+            <small>Remove shorts shelves, links, and pages.</small>
+          </span>
+          <input id="hideShorts" type="checkbox">
+        </label>
+
+        <label class="setting-row">
+          <span>
+            <strong>Hide sidebar</strong>
+            <small>Clear recommended videos while watching.</small>
+          </span>
+          <input id="hideSidebar" type="checkbox">
+        </label>
+
+        <label class="setting-row">
+          <span>
+            <strong>Hide home feed</strong>
+            <small>Keep the homepage quiet.</small>
+          </span>
+          <input id="hideHomeFeed" type="checkbox">
+        </label>
+
+        <label class="setting-row">
+          <span>
+            <strong>Block autoplay</strong>
+            <small>Stop the next video from starting itself.</small>
+          </span>
+          <input id="blockAutoplay" type="checkbox">
+        </label>
+
+        <label class="setting-row">
+          <span>
+            <strong>Hide comments</strong>
+            <small>Optional deep-focus cleanup.</small>
+          </span>
+          <input id="hideComments" type="checkbox">
+        </label>
+
+        <label class="setting-row">
+          <span>
+            <strong>Strict Mode</strong>
+            <small>Block Shorts and noisy browse pages harder.</small>
+          </span>
+          <input id="strictMode" type="checkbox">
+        </label>
+      </section>
+
+      <section class="whitelist-panel">
+        <div class="section-title">
+          <h2>Educational Channels</h2>
+        </div>
+        <button id="whitelistCurrentBtn" class="wide-btn" type="button">Whitelist Current Channel</button>
+        <form id="whitelistForm" class="whitelist-form">
+          <input id="channelInput" type="text" placeholder="Channel name" autocomplete="off">
+          <button type="submit">Add</button>
+        </form>
+        <ul id="whitelistList" class="whitelist-list" aria-label="Whitelisted educational channels"></ul>
+      </section>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

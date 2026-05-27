@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>YouTube Focus Mode Dashboard</title>
+    <link rel="stylesheet" href="options.css">
+  </head>
+  <body>
+    <main class="page">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">YouTube Focus Mode</p>
+          <h1>Study Dashboard</h1>
+        </div>
+        <label class="switch hero-switch" for="studyMode">
+          <input id="studyMode" type="checkbox">
+          <span></span>
+          Study Mode
+        </label>
+      </header>
+
+      <section class="stat-grid" aria-label="Study stats">
+        <article class="stat-card">
+          <span>Total Today</span>
+          <strong id="totalToday">0m</strong>
+        </article>
+        <article class="stat-card">
+          <span>Distraction Avoided</span>
+          <strong id="avoidedToday">0m</strong>
+        </article>
+        <article class="stat-card">
+          <span>Focus Streak</span>
+          <strong id="streak">0 days</strong>
+        </article>
+        <article class="stat-card">
+          <span>XP Level</span>
+          <strong id="xpLevel">Level 1</strong>
+        </article>
+      </section>
+
+      <section class="panel progress-panel">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Daily Goal</p>
+            <h2 id="goalTitle">0 / 120 min</h2>
+          </div>
+          <strong id="goalPercent">0%</strong>
+        </div>
+        <div class="goal-track">
+          <span id="goalBar"></span>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Last 7 Days</p>
+            <h2>Focus History</h2>
+          </div>
+        </div>
+        <div id="historyChart" class="history-chart" aria-label="Seven day focus history"></div>
+      </section>
+
+      <section class="settings-grid">
+        <article class="panel">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Pomodoro</p>
+              <h2>Timer</h2>
+            </div>
+          </div>
+          <div class="field-grid">
+            <label class="field">
+              <span>Focus Minutes</span>
+              <input id="focusMinutes" type="number" min="5" max="180" step="5">
+            </label>
+            <label class="field">
+              <span>Break Minutes</span>
+              <input id="breakMinutes" type="number" min="1" max="60" step="1">
+            </label>
+            <label class="field">
+              <span>Daily Goal</span>
+              <input id="dailyGoalMinutes" type="number" min="15" max="600" step="15">
+            </label>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Ambient</p>
+              <h2>Sound</h2>
+            </div>
+          </div>
+          <label class="field">
+            <span>Soundscape</span>
+            <select id="ambientSound">
+              <option value="rain">Rain</option>
+              <option value="cafe">Cafe</option>
+              <option value="white-noise">White Noise</option>
+              <option value="forest">Forest</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Volume</span>
+            <input id="ambientVolume" type="range" min="0" max="100">
+          </label>
+        </article>
+
+        <article class="panel">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Blocking</p>
+              <h2>Focus Rules</h2>
+            </div>
+          </div>
+          <div class="switch-list">
+            <label class="switch"><input id="hideShorts" type="checkbox"><span></span>Hide Shorts</label>
+            <label class="switch"><input id="hideSidebar" type="checkbox"><span></span>Hide Sidebar</label>
+            <label class="switch"><input id="hideHomeFeed" type="checkbox"><span></span>Hide Home Feed</label>
+            <label class="switch"><input id="hideComments" type="checkbox"><span></span>Hide Comments</label>
+            <label class="switch"><input id="blockAutoplay" type="checkbox"><span></span>Block Autoplay</label>
+            <label class="switch"><input id="strictMode" type="checkbox"><span></span>Strict Mode</label>
+            <label class="switch"><input id="blockScreen" type="checkbox"><span></span>Shorts Block Screen</label>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Alerts</p>
+              <h2>Notifications</h2>
+            </div>
+          </div>
+          <div class="switch-list">
+            <label class="switch"><input id="notificationsEnabled" type="checkbox"><span></span>Timer Notifications</label>
+            <label class="switch"><input id="soundAlerts" type="checkbox"><span></span>Soft Sound Alerts</label>
+          </div>
+          <div class="shortcut-list">
+            <p><strong>⌘/Ctrl + Shift + Y</strong> Toggle Study Mode</p>
+            <p><strong>⌘/Ctrl + Shift + U</strong> Start or Pause Timer</p>
+            <p><strong>⌘/Ctrl + Shift + M</strong> Toggle Ambient Sound</p>
+          </div>
+        </article>
+      </section>
+
+      <section class="panel whitelist-panel">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Whitelist</p>
+            <h2>Educational Channels</h2>
+          </div>
+          <span id="saveStatus">Saved</span>
+        </div>
+        <form id="whitelistForm" class="whitelist-form">
+          <input id="channelInput" type="text" placeholder="Channel name" autocomplete="off">
+          <button type="submit">Add Channel</button>
+        </form>
+        <ul id="whitelistList" class="whitelist-list"></ul>
+      </section>
+    </main>
+
+    <script src="options.js"></script>
+  </body>
+</html>
