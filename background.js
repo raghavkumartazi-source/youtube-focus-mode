@@ -13,6 +13,7 @@ const DEFAULT_SETTINGS = {
   hideComments: false,
   blockAutoplay: true,
   strictMode: false,
+  grayscaleMode: false,
   blockScreen: true,
   notificationsEnabled: true,
   soundAlerts: true,

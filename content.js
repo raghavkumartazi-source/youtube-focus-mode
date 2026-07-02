@@ -15,6 +15,7 @@
     hideComments: false,
     blockAutoplay: true,
     strictMode: false,
+  grayscaleMode: false,
     blockScreen: true,
     notificationsEnabled: true,
     soundAlerts: true,
@@ -182,6 +183,10 @@
     const style = document.createElement("style");
     style.id = "yfm-page-style";
     style.textContent = `
+      html[data-yfm-grayscale="on"] ytd-app {
+        filter: grayscale(100%) !important;
+      }
+
       html[data-yfm-study-mode="on"] ytd-rich-section-renderer:has(a[href^="/shorts"]),
       html[data-yfm-study-mode="on"] ytd-rich-item-renderer:has(a[href^="/shorts"]),
       html[data-yfm-study-mode="on"] ytd-video-renderer:has(a[href^="/shorts"]),
@@ -367,6 +372,7 @@
 
   function applyFocusMode() {
     document.documentElement.dataset.yfmStudyMode = settings.studyMode ? "on" : "off";
+    document.documentElement.dataset.yfmGrayscale = settings.grayscaleMode && settings.studyMode ? "on" : "off";
 
     if (!settings.studyMode) {
       restoreHiddenElements();

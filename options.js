@@ -12,6 +12,7 @@ const DEFAULT_SETTINGS = {
   hideComments: false,
   blockAutoplay: true,
   strictMode: false,
+  grayscaleMode: false,
   blockScreen: true,
   notificationsEnabled: true,
   soundAlerts: true,
@@ -74,6 +75,7 @@ const els = {
   hideComments: document.getElementById("hideComments"),
   blockAutoplay: document.getElementById("blockAutoplay"),
   strictMode: document.getElementById("strictMode"),
+  grayscaleMode: document.getElementById("grayscaleMode"),
   blockScreen: document.getElementById("blockScreen"),
   notificationsEnabled: document.getElementById("notificationsEnabled"),
   soundAlerts: document.getElementById("soundAlerts"),
@@ -133,6 +135,7 @@ function bindEvents() {
     "hideComments",
     "blockAutoplay",
     "strictMode",
+    "grayscaleMode",
     "blockScreen",
     "notificationsEnabled",
     "soundAlerts"
@@ -198,6 +201,7 @@ function render() {
     "hideComments",
     "blockAutoplay",
     "strictMode",
+    "grayscaleMode",
     "blockScreen",
     "notificationsEnabled",
     "soundAlerts"
