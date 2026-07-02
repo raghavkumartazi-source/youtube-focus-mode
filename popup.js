@@ -12,6 +12,7 @@ const DEFAULT_SETTINGS = {
   hideComments: false,
   blockAutoplay: true,
   strictMode: false,
+  grayscaleMode: false,
   blockScreen: true,
   notificationsEnabled: true,
   soundAlerts: true,
@@ -85,6 +86,7 @@ const els = {
   blockAutoplay: document.getElementById("blockAutoplay"),
   hideComments: document.getElementById("hideComments"),
   strictMode: document.getElementById("strictMode"),
+  grayscaleMode: document.getElementById("grayscaleMode"),
   whitelistCurrentBtn: document.getElementById("whitelistCurrentBtn"),
   whitelistForm: document.getElementById("whitelistForm"),
   channelInput: document.getElementById("channelInput"),
@@ -147,7 +149,7 @@ function bindEvents() {
     updateSettings({ studyMode: els.studyModeToggle.checked });
   });
 
-  for (const id of ["hideShorts", "hideSidebar", "hideHomeFeed", "blockAutoplay", "hideComments", "strictMode"]) {
+  for (const id of ["hideShorts", "hideSidebar", "hideHomeFeed", "blockAutoplay", "hideComments", "strictMode", "grayscaleMode"]) {
     els[id].addEventListener("change", () => {
       updateSettings({ [id]: els[id].checked });
     });
@@ -192,6 +194,7 @@ function render() {
   els.blockAutoplay.checked = state.settings.blockAutoplay;
   els.hideComments.checked = state.settings.hideComments;
   els.strictMode.checked = state.settings.strictMode;
+  els.grayscaleMode.checked = state.settings.grayscaleMode;
   els.ambientBtn.classList.toggle("is-active", state.settings.ambientEnabled);
   els.quoteText.textContent = QUOTES[getDayQuoteIndex()];
 

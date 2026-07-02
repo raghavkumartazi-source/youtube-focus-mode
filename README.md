@@ -14,6 +14,7 @@ YouTube Focus Mode is a modern Chrome extension designed for students, developer
 - Hide homepage feed
 - Optional comment section blocker
 - Disable autoplay automatically
+- **Grayscale Mode**: Remove colors to reduce the psychological urge to click bright, flashy thumbnails.
 
 ### ⏳ Productivity Tools
 - Built-in Pomodoro focus timer
