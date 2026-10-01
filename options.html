@@ -39,6 +39,8 @@
         </article>
       </section>
 
+      <p id="statsExtra" class="stats-extra">Best streak 0 days · All-time focus 0m</p>
+
       <section class="panel progress-panel">
         <div class="section-head">
           <div>
@@ -83,7 +85,20 @@
               <span>Daily Goal</span>
               <input id="dailyGoalMinutes" type="number" min="15" max="600" step="15">
             </label>
+            <label class="field">
+              <span>Long Break Minutes</span>
+              <input id="longBreakMinutes" type="number" min="5" max="60" step="5">
+            </label>
+            <label class="field">
+              <span>Sessions per Cycle</span>
+              <input id="sessionsUntilLongBreak" type="number" min="2" max="8" step="1">
+            </label>
           </div>
+          <label class="switch timer-auto">
+            <input id="autoStartNextFocus" type="checkbox">
+            <span></span>
+            Auto-start next focus session
+          </label>
         </article>
 
         <article class="panel">
@@ -122,6 +137,7 @@
             <label class="switch"><input id="hideComments" type="checkbox"><span></span>Hide Comments</label>
             <label class="switch"><input id="blockAutoplay" type="checkbox"><span></span>Block Autoplay</label>
             <label class="switch"><input id="strictMode" type="checkbox"><span></span>Strict Mode</label>
+            <label class="switch"><input id="widgetEnabled" type="checkbox"><span></span>Show Focus Widget</label>
             <label class="switch"><input id="blockScreen" type="checkbox"><span></span>Shorts Block Screen</label>
           </div>
         </article>
@@ -145,6 +161,22 @@
         </article>
       </section>
 
+      <section class="panel data-panel">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Backup</p>
+            <h2>Your Data</h2>
+          </div>
+          <span id="dataStatus"></span>
+        </div>
+        <p class="data-copy">Everything stays in your browser. Export a JSON backup or restore one anytime.</p>
+        <div class="data-actions">
+          <button id="exportDataBtn" class="data-btn" type="button">Export Data</button>
+          <button id="importDataBtn" class="data-btn" type="button">Import Data</button>
+          <input id="importDataInput" type="file" accept="application/json,.json" hidden>
+        </div>
+      </section>
+
       <section class="panel whitelist-panel">
         <div class="section-head">
           <div>
@@ -161,6 +193,7 @@
       </section>
     </main>
 
+    <script src="shared.js"></script>
     <script src="options.js"></script>
   </body>
 </html>

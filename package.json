@@ -1,0 +1,14 @@
+{
+  "name": "youtube-focus-mode",
+  "version": "1.3.0",
+  "description": "A distraction-free YouTube study mode with Pomodoro, stats, streaks, and ambient focus tools.",
+  "private": true,
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --check shared.js && node --check background.js && node --check content.js && node --check popup.js && node --check options.js",
+    "check": "npm run lint && npm test"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

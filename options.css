@@ -1,14 +1,17 @@
 :root {
   color-scheme: dark;
-  --bg: #0c0f14;
-  --panel: rgba(255, 255, 255, 0.07);
-  --panel-strong: rgba(255, 255, 255, 0.11);
-  --line: rgba(255, 255, 255, 0.13);
-  --text: #f5f7fb;
-  --muted: #98a4b3;
+  --bg: #07090d;
+  --bg-2: #0c1016;
+  --panel: rgba(255, 255, 255, 0.055);
+  --panel-strong: rgba(255, 255, 255, 0.1);
+  --line: rgba(255, 255, 255, 0.11);
+  --line-strong: rgba(255, 255, 255, 0.2);
+  --text: #f2f6fc;
+  --muted: #aab6c6;
   --accent: #72e4b4;
   --gold: #f6c76f;
   --blue: #86b7ff;
+  --focus: 0 0 0 2px var(--bg), 0 0 0 4px rgba(114, 228, 180, 0.7);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
@@ -18,10 +21,23 @@
 
 body {
   background:
-    linear-gradient(145deg, #0c0f14 0%, #131922 54%, #0f1218 100%);
+    radial-gradient(circle at 10% -5%, rgba(114, 228, 180, 0.11), transparent 34%),
+    radial-gradient(circle at 90% 0%, rgba(134, 183, 255, 0.08), transparent 30%),
+    linear-gradient(160deg, var(--bg) 0%, var(--bg-2) 54%, #080b10 100%);
   color: var(--text);
   margin: 0;
   min-height: 100vh;
+}
+
+button {
+  border: 0;
+  cursor: pointer;
+}
+
+:focus-visible {
+  border-radius: 8px;
+  box-shadow: var(--focus);
+  outline: none;
 }
 
 button,
@@ -81,8 +97,8 @@ h2 {
 .stat-card {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.28);
+  border-radius: 10px;
+  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.36);
 }
 
 .stat-grid {
@@ -94,6 +110,32 @@ h2 {
 .stat-card {
   min-height: 112px;
   padding: 18px;
+  position: relative;
+  transition: border-color 160ms ease, transform 160ms ease;
+}
+
+.stat-card::after {
+  background: var(--accent);
+  border-radius: 999px;
+  content: "";
+  height: 3px;
+  left: 18px;
+  position: absolute;
+  right: 18px;
+  top: 0;
+}
+
+.stat-card:nth-child(2n)::after {
+  background: var(--gold);
+}
+
+.stat-card:nth-child(3n)::after {
+  background: var(--blue);
+}
+
+.stat-card:hover {
+  border-color: var(--line-strong);
+  transform: translateY(-2px);
 }
 
 .stat-card span {
@@ -161,13 +203,17 @@ h2 {
 
 .history-bar {
   align-self: end;
-  background: rgba(134, 183, 255, 0.2);
+  background: linear-gradient(180deg, rgba(134, 183, 255, 0.42), rgba(134, 183, 255, 0.18));
   border: 1px solid rgba(134, 183, 255, 0.35);
   border-radius: 8px 8px 3px 3px;
   min-height: 8px;
   position: relative;
-  transition: height 220ms ease;
+  transition: height 220ms ease, filter 160ms ease;
   width: 100%;
+}
+
+.history-bar:hover {
+  filter: drop-shadow(0 0 6px rgba(134, 183, 255, 0.5));
 }
 
 .history-bar span {
@@ -305,6 +351,42 @@ h2 {
 .shortcut-list strong {
   color: var(--text);
   margin-right: 8px;
+}
+
+.stats-extra {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.timer-auto {
+  margin-top: 12px;
+}
+
+.data-copy {
+  color: var(--muted);
+  font-size: 13px;
+  margin-bottom: 14px;
+}
+
+.data-actions {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.data-btn {
+  background: var(--panel-strong);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  font-weight: 900;
+  min-height: 42px;
+  transition: transform 160ms ease, border-color 160ms ease;
+}
+
+.data-btn:hover {
+  border-color: rgba(114, 228, 180, 0.55);
+  transform: translateY(-1px);
 }
 
 .whitelist-form {

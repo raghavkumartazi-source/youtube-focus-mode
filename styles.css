@@ -1,15 +1,18 @@
 :root {
   color-scheme: dark;
-  --bg: #0c0f14;
-  --panel: rgba(255, 255, 255, 0.07);
-  --panel-strong: rgba(255, 255, 255, 0.11);
-  --line: rgba(255, 255, 255, 0.12);
-  --text: #f5f7fb;
-  --muted: #9aa5b5;
+  --bg: #07090d;
+  --bg-2: #0c1016;
+  --panel: rgba(255, 255, 255, 0.055);
+  --panel-strong: rgba(255, 255, 255, 0.1);
+  --line: rgba(255, 255, 255, 0.11);
+  --line-strong: rgba(255, 255, 255, 0.2);
+  --text: #f2f6fc;
+  --muted: #aab6c6;
   --accent: #72e4b4;
   --accent-strong: #3ddc97;
   --warning: #f6c76f;
-  --shadow: 0 18px 60px rgba(0, 0, 0, 0.36);
+  --shadow: 0 18px 60px rgba(0, 0, 0, 0.44);
+  --focus: 0 0 0 2px var(--bg), 0 0 0 4px rgba(114, 228, 180, 0.7);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
@@ -28,8 +31,9 @@ body {
 
 body {
   background:
-    radial-gradient(circle at top left, rgba(114, 228, 180, 0.16), transparent 34%),
-    linear-gradient(145deg, #0c0f14 0%, #121821 48%, #101319 100%);
+    radial-gradient(circle at 12% -10%, rgba(114, 228, 180, 0.14), transparent 38%),
+    radial-gradient(circle at 92% 4%, rgba(134, 183, 255, 0.09), transparent 32%),
+    linear-gradient(160deg, var(--bg) 0%, var(--bg-2) 52%, #080b10 100%);
   color: var(--text);
   overflow: hidden;
 }
@@ -44,14 +48,42 @@ button {
   cursor: pointer;
 }
 
+/* Keyboard users get a visible ring; mouse clicks stay clean. */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+  border-radius: 8px;
+}
+
 .app-shell {
   display: grid;
-  gap: 14px;
+  gap: 10px;
+  /* Chrome caps popup height at 600px. Keep the shell at that cap and scroll
+     inside it; the collapsed sections keep the default view well under it. */
   max-height: 600px;
   overflow-x: hidden;
   overflow-y: auto;
-  padding: 18px;
+  overscroll-behavior: contain;
+  padding: 14px 14px 24px;
   width: 380px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
+}
+
+.app-shell::-webkit-scrollbar {
+  width: 10px;
+}
+
+.app-shell::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22);
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+}
+
+.app-shell::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.36);
+  background-clip: content-box;
 }
 
 .topbar {
@@ -140,6 +172,7 @@ h2 {
 .timer-panel,
 .settings-panel,
 .whitelist-panel,
+.report-panel,
 .stat-card {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -149,7 +182,7 @@ h2 {
 
 .status-panel {
   overflow: hidden;
-  padding: 15px;
+  padding: 11px 13px;
   position: relative;
 }
 
@@ -178,24 +211,24 @@ h2 {
 .timer-panel {
   align-items: center;
   display: flex;
-  gap: 14px;
+  gap: 12px;
   justify-content: space-between;
-  padding: 16px;
+  padding: 12px 13px;
 }
 
 .progress-ring {
   display: grid;
-  flex: 0 0 74px;
-  height: 74px;
+  flex: 0 0 62px;
+  height: 62px;
   place-items: center;
   position: relative;
-  width: 74px;
+  width: 62px;
 }
 
 .progress-ring svg {
-  height: 74px;
+  height: 62px;
   transform: rotate(-90deg);
-  width: 74px;
+  width: 62px;
 }
 
 .ring-bg,
@@ -213,6 +246,7 @@ h2 {
   stroke-dasharray: 326.73;
   stroke-dashoffset: 0;
   stroke-linecap: round;
+  filter: drop-shadow(0 0 5px rgba(114, 228, 180, 0.55));
   transition: stroke-dashoffset 220ms ease;
 }
 
@@ -225,7 +259,7 @@ h2 {
 
 .timer-copy strong {
   display: block;
-  font-size: 38px;
+  font-size: 32px;
   letter-spacing: 0;
   line-height: 1;
 }
@@ -248,10 +282,15 @@ h2 {
 }
 
 .primary-btn {
-  background: var(--accent);
+  background: linear-gradient(180deg, var(--accent-strong), var(--accent));
+  box-shadow: 0 6px 18px rgba(61, 220, 151, 0.26);
   color: #08110d;
   font-weight: 900;
   padding: 0 15px;
+}
+
+.primary-btn:hover {
+  box-shadow: 0 8px 24px rgba(61, 220, 151, 0.38);
 }
 
 .icon-btn {
@@ -288,28 +327,186 @@ h2 {
 
 .stat-card {
   box-shadow: none;
-  min-height: 72px;
-  padding: 13px;
+  min-height: 60px;
+  padding: 10px 12px;
+  position: relative;
+  transition: border-color 160ms ease, transform 160ms ease, background 160ms ease;
+}
+
+.stat-card::after {
+  background: var(--accent);
+  border-radius: 999px;
+  content: "";
+  height: 3px;
+  left: 12px;
+  position: absolute;
+  right: 12px;
+  top: 0;
+}
+
+.stat-card:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+}
+
+/* A subtle hint of warmth on the right-hand column to break up the green. */
+.stat-card:nth-child(2n)::after {
+  background: var(--warning);
 }
 
 .stat-card span {
   color: var(--muted);
   display: block;
-  font-size: 12px;
-  margin-bottom: 7px;
+  font-size: 11px;
+  margin-bottom: 5px;
 }
 
 .stat-card strong {
   display: block;
-  font-size: 22px;
+  font-size: 19px;
   line-height: 1.1;
+}
+
+.report-panel {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.level-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  padding: 11px 13px;
+}
+
+.level-track {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  height: 10px;
+  overflow: hidden;
+}
+
+.level-track span {
+  background: linear-gradient(90deg, var(--accent), var(--warning));
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+  transition: width 220ms ease;
+  width: 0;
+}
+
+.report-panel[hidden] {
+  display: none;
+}
+
+.report-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.report-grid div {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  min-width: 0;
+  padding: 10px;
+}
+
+.report-grid span {
+  color: var(--muted);
+  display: block;
+  font-size: 11px;
+  margin-bottom: 6px;
+}
+
+.report-grid strong {
+  display: block;
+  font-size: 17px;
+  line-height: 1.1;
+}
+
+.widget-toggle-panel {
+  align-items: center;
+  background: rgba(246, 199, 111, 0.08);
+  border: 1px solid rgba(246, 199, 111, 0.3);
+  border-radius: 8px;
+  color: var(--muted);
+  display: flex;
+  font-size: 12px;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+
+.widget-toggle-panel .wide-btn {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 0 12px;
+}
+
+.widget-toggle-panel[hidden] {
+  display: none;
 }
 
 .settings-panel,
 .whitelist-panel {
   display: grid;
   gap: 10px;
-  padding: 14px;
+  padding: 12px 13px;
+}
+
+.collapsible > summary {
+  border-radius: 6px;
+  cursor: pointer;
+  list-style: none;
+  margin: -4px -6px;
+  padding: 4px 6px;
+  transition: background 160ms ease;
+  user-select: none;
+}
+
+.collapsible > summary:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.collapsible > summary:focus-visible {
+  box-shadow: var(--focus);
+}
+
+.collapsible > summary::-webkit-details-marker {
+  display: none;
+}
+
+.collapsible > summary h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.collapsible > summary h2::before {
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  content: "";
+  display: block;
+  height: 7px;
+  transform: rotate(-45deg) translateY(-1px);
+  transition: transform 160ms ease;
+  width: 7px;
+}
+
+.collapsible[open] > summary h2::before {
+  transform: rotate(45deg) translateY(-1px);
+}
+
+.collapsible-body {
+  display: grid;
+  gap: 10px;
+  padding-top: 2px;
 }
 
 .section-title {
@@ -329,9 +526,9 @@ h2 {
   border: 1px solid transparent;
   border-radius: 8px;
   display: flex;
-  gap: 12px;
+  gap: 10px;
   justify-content: space-between;
-  padding: 10px;
+  padding: 8px 10px;
   transition: background 160ms ease, border-color 160ms ease;
 }
 
@@ -467,15 +664,20 @@ h2 {
   color: var(--text);
   height: 20px;
   line-height: 1;
+  transition: background 160ms ease;
   width: 20px;
+}
+
+.whitelist-list button:hover {
+  background: rgba(255, 255, 255, 0.26);
 }
 
 @media (max-width: 360px) {
   .app-shell {
-    padding: 14px;
+    padding: 12px;
   }
 
   .timer-copy strong {
-    font-size: 36px;
+    font-size: 28px;
   }
 }

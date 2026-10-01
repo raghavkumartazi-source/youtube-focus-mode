@@ -1,52 +1,3 @@
-const STORAGE_KEYS = {
-  settings: "yfmSettings",
-  stats: "yfmStats",
-  timer: "yfmTimer"
-};
-
-const DEFAULT_SETTINGS = {
-  studyMode: true,
-  hideShorts: true,
-  hideSidebar: true,
-  hideHomeFeed: true,
-  hideComments: false,
-  blockAutoplay: true,
-  strictMode: false,
-  blockScreen: true,
-  notificationsEnabled: true,
-  soundAlerts: true,
-  ambientEnabled: false,
-  ambientSound: "rain",
-  ambientVolume: 45,
-  dailyGoalMinutes: 120,
-  whitelistChannels: []
-};
-
-const DEFAULT_STATS = {
-  date: getTodayKey(),
-  totalStudyMsToday: 0,
-  avoidedMsToday: 0,
-  focusSessionsToday: 0,
-  streak: 0,
-  xp: 0,
-  lastFocusDate: "",
-  lastCompletedSessionId: "",
-  lastCompletedBreakSessionId: "",
-  history: {}
-};
-
-const DEFAULT_TIMER = {
-  phase: "focus",
-  focusMs: 25 * 60 * 1000,
-  breakMs: 5 * 60 * 1000,
-  durationMs: 25 * 60 * 1000,
-  remainingMs: 25 * 60 * 1000,
-  isRunning: false,
-  startedAt: 0,
-  endsAt: 0,
-  sessionId: ""
-};
-
 const state = {
   settings: { ...DEFAULT_SETTINGS },
   stats: { ...DEFAULT_STATS },
@@ -59,6 +10,7 @@ const els = {
   avoidedToday: document.getElementById("avoidedToday"),
   streak: document.getElementById("streak"),
   xpLevel: document.getElementById("xpLevel"),
+  statsExtra: document.getElementById("statsExtra"),
   goalTitle: document.getElementById("goalTitle"),
   goalPercent: document.getElementById("goalPercent"),
   goalBar: document.getElementById("goalBar"),
@@ -66,6 +18,9 @@ const els = {
   focusMinutes: document.getElementById("focusMinutes"),
   breakMinutes: document.getElementById("breakMinutes"),
   dailyGoalMinutes: document.getElementById("dailyGoalMinutes"),
+  longBreakMinutes: document.getElementById("longBreakMinutes"),
+  sessionsUntilLongBreak: document.getElementById("sessionsUntilLongBreak"),
+  autoStartNextFocus: document.getElementById("autoStartNextFocus"),
   ambientSound: document.getElementById("ambientSound"),
   ambientVolume: document.getElementById("ambientVolume"),
   hideShorts: document.getElementById("hideShorts"),
@@ -74,10 +29,15 @@ const els = {
   hideComments: document.getElementById("hideComments"),
   blockAutoplay: document.getElementById("blockAutoplay"),
   strictMode: document.getElementById("strictMode"),
+  widgetEnabled: document.getElementById("widgetEnabled"),
   blockScreen: document.getElementById("blockScreen"),
   notificationsEnabled: document.getElementById("notificationsEnabled"),
   soundAlerts: document.getElementById("soundAlerts"),
   saveStatus: document.getElementById("saveStatus"),
+  exportDataBtn: document.getElementById("exportDataBtn"),
+  importDataBtn: document.getElementById("importDataBtn"),
+  importDataInput: document.getElementById("importDataInput"),
+  dataStatus: document.getElementById("dataStatus"),
   whitelistForm: document.getElementById("whitelistForm"),
   channelInput: document.getElementById("channelInput"),
   whitelistList: document.getElementById("whitelistList")
@@ -133,9 +93,11 @@ function bindEvents() {
     "hideComments",
     "blockAutoplay",
     "strictMode",
+    "widgetEnabled",
     "blockScreen",
     "notificationsEnabled",
-    "soundAlerts"
+    "soundAlerts",
+    "autoStartNextFocus"
   ];
 
   for (const id of settingInputs) {
@@ -144,12 +106,14 @@ function bindEvents() {
     });
   }
 
-  for (const id of ["dailyGoalMinutes", "ambientVolume", "ambientSound"]) {
+  for (const id of ["dailyGoalMinutes", "ambientVolume", "ambientSound", "longBreakMinutes", "sessionsUntilLongBreak"]) {
     els[id].addEventListener("input", () => {
       updateSettings({
         dailyGoalMinutes: Number(els.dailyGoalMinutes.value),
         ambientVolume: Number(els.ambientVolume.value),
-        ambientSound: els.ambientSound.value
+        ambientSound: els.ambientSound.value,
+        longBreakMinutes: Number(els.longBreakMinutes.value),
+        sessionsUntilLongBreak: Number(els.sessionsUntilLongBreak.value)
       });
     });
   }
@@ -169,6 +133,10 @@ function bindEvents() {
       whitelistChannels: uniqueChannels([...state.settings.whitelistChannels, channel])
     });
   });
+
+  els.exportDataBtn.addEventListener("click", exportData);
+  els.importDataBtn.addEventListener("click", () => els.importDataInput.click());
+  els.importDataInput.addEventListener("change", importData);
 }
 
 function render() {
@@ -177,6 +145,10 @@ function render() {
   els.avoidedToday.textContent = formatDuration(state.stats.avoidedMsToday);
   els.streak.textContent = `${state.stats.streak} ${state.stats.streak === 1 ? "day" : "days"}`;
   els.xpLevel.textContent = `Level ${Math.floor(state.stats.xp / 100) + 1}`;
+
+  const bestStreak = Math.max(state.stats.streak, state.stats.bestStreak);
+  els.statsExtra.textContent =
+    `Best streak ${bestStreak} ${bestStreak === 1 ? "day" : "days"} · All-time focus ${formatDuration(state.stats.totalStudyMsAllTime)}`;
 
   const todayMinutes = Math.floor(state.stats.totalStudyMsToday / 60000);
   const goalMinutes = state.settings.dailyGoalMinutes;
@@ -188,6 +160,8 @@ function render() {
   els.focusMinutes.value = Math.round(state.timer.focusMs / 60000);
   els.breakMinutes.value = Math.round(state.timer.breakMs / 60000);
   els.dailyGoalMinutes.value = state.settings.dailyGoalMinutes;
+  els.longBreakMinutes.value = state.settings.longBreakMinutes;
+  els.sessionsUntilLongBreak.value = state.settings.sessionsUntilLongBreak;
   els.ambientSound.value = state.settings.ambientSound;
   els.ambientVolume.value = state.settings.ambientVolume;
 
@@ -198,9 +172,11 @@ function render() {
     "hideComments",
     "blockAutoplay",
     "strictMode",
+    "widgetEnabled",
     "blockScreen",
     "notificationsEnabled",
-    "soundAlerts"
+    "soundAlerts",
+    "autoStartNextFocus"
   ]) {
     els[id].checked = state.settings[id];
   }
@@ -275,7 +251,7 @@ async function updateSettings(partial) {
 async function updateTimerLengths() {
   const focusMs = clampNumber(Number(els.focusMinutes.value), 5, 180, 25) * 60 * 1000;
   const breakMs = clampNumber(Number(els.breakMinutes.value), 1, 60, 5) * 60 * 1000;
-  const currentDuration = state.timer.phase === "break" ? breakMs : focusMs;
+  const currentDuration = getPhaseDuration(state.timer, state.timer.phase);
   const remainingMs = state.timer.isRunning
     ? Math.min(getTimerRemainingMs(state.timer), currentDuration)
     : currentDuration;
@@ -297,64 +273,6 @@ async function updateTimerLengths() {
   render();
 }
 
-function getTimerRemainingMs(timer) {
-  if (!timer.isRunning || !timer.endsAt) {
-    return Math.max(0, timer.remainingMs);
-  }
-  return Math.max(0, timer.endsAt - Date.now());
-}
-
-function normalizeSettings(settings = {}) {
-  return {
-    ...DEFAULT_SETTINGS,
-    ...settings,
-    ambientVolume: clampNumber(settings.ambientVolume, 0, 100, DEFAULT_SETTINGS.ambientVolume),
-    dailyGoalMinutes: clampNumber(settings.dailyGoalMinutes, 15, 600, DEFAULT_SETTINGS.dailyGoalMinutes),
-    ambientSound: ["rain", "cafe", "white-noise", "forest"].includes(settings.ambientSound)
-      ? settings.ambientSound
-      : DEFAULT_SETTINGS.ambientSound,
-    whitelistChannels: uniqueChannels(settings.whitelistChannels || [])
-  };
-}
-
-function normalizeStats(stats = {}) {
-  return {
-    ...DEFAULT_STATS,
-    ...stats,
-    totalStudyMsToday: Number(stats.totalStudyMsToday) || 0,
-    avoidedMsToday: Number(stats.avoidedMsToday) || 0,
-    focusSessionsToday: Number(stats.focusSessionsToday) || 0,
-    streak: Number(stats.streak) || 0,
-    xp: Number(stats.xp) || 0,
-    history: stats.history || {}
-  };
-}
-
-function normalizeTimer(timer = {}) {
-  return {
-    ...DEFAULT_TIMER,
-    ...timer,
-    focusMs: numberOrDefault(timer.focusMs, DEFAULT_TIMER.focusMs),
-    breakMs: numberOrDefault(timer.breakMs, DEFAULT_TIMER.breakMs),
-    durationMs: numberOrDefault(timer.durationMs, DEFAULT_TIMER.durationMs),
-    remainingMs: numberOrDefault(timer.remainingMs, DEFAULT_TIMER.remainingMs)
-  };
-}
-
-function uniqueChannels(channels) {
-  const seen = new Set();
-  const result = [];
-  for (const channel of channels) {
-    const clean = String(channel || "").trim().replace(/\s+/g, " ");
-    const key = clean.replace(/^@/, "").toLowerCase();
-    if (clean && !seen.has(key)) {
-      seen.add(key);
-      result.push(clean);
-    }
-  }
-  return result;
-}
-
 function getLastSevenDays() {
   const days = [];
   const date = new Date();
@@ -372,50 +290,66 @@ function formatDayLabel(dateKey) {
   return date.toLocaleDateString(undefined, { weekday: "short" });
 }
 
-function formatDuration(ms) {
-  const totalMinutes = Math.floor(ms / 60000);
-  if (totalMinutes < 60) {
-    return `${totalMinutes}m`;
-  }
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return minutes ? `${hours}h ${minutes}m` : `${hours}h`;
-}
-
-function getTodayKey(date = new Date()) {
-  return [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, "0"),
-    String(date.getDate()).padStart(2, "0")
-  ].join("-");
-}
-
-function numberOrDefault(value, fallback) {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : fallback;
-}
-
-function clampNumber(value, min, max, fallback) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) {
-    return fallback;
-  }
-  return Math.max(min, Math.min(max, numeric));
-}
-
 function setSaveStatus(label) {
   els.saveStatus.textContent = label;
 }
 
-function sendRuntimeMessage(message) {
-  return new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage(message, (response) => {
-      const error = chrome.runtime.lastError;
-      if (error) {
-        reject(error);
-        return;
-      }
-      resolve(response);
-    });
-  });
+async function exportData() {
+  setDataStatus("Exporting");
+  const stored = await chrome.storage.local.get(Object.values(STORAGE_KEYS));
+  const payload = {
+    app: "youtube-focus-mode",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    data: stored
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `youtube-focus-mode-backup-${getTodayKey()}.json`;
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  setDataStatus("Exported");
+}
+
+async function importData(event) {
+  const file = event.target.files && event.target.files[0];
+  event.target.value = "";
+  if (!file) {
+    return;
+  }
+
+  try {
+    const parsed = JSON.parse(await file.text());
+    const source = parsed && typeof parsed.data === "object" && parsed.data ? parsed.data : parsed;
+    const next = {};
+    if (source[STORAGE_KEYS.settings]) {
+      next[STORAGE_KEYS.settings] = normalizeSettings(source[STORAGE_KEYS.settings]);
+    }
+    if (source[STORAGE_KEYS.stats]) {
+      next[STORAGE_KEYS.stats] = normalizeStats(source[STORAGE_KEYS.stats]);
+    }
+    if (source[STORAGE_KEYS.timer]) {
+      next[STORAGE_KEYS.timer] = normalizeTimer(source[STORAGE_KEYS.timer]);
+    }
+    if (source[STORAGE_KEYS.widgetPosition]) {
+      next[STORAGE_KEYS.widgetPosition] = normalizePosition(source[STORAGE_KEYS.widgetPosition]);
+    }
+
+    if (!Object.keys(next).length) {
+      throw new Error("No recognizable YouTube Focus Mode data found.");
+    }
+
+    await chrome.storage.local.set(next);
+    await hydrateState();
+    render();
+    setDataStatus("Imported");
+  } catch (_error) {
+    setDataStatus("Import failed");
+  }
+}
+
+function setDataStatus(label) {
+  els.dataStatus.textContent = label;
 }

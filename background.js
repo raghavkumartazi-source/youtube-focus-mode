@@ -1,60 +1,54 @@
-const STORAGE_KEYS = {
-  settings: "yfmSettings",
-  stats: "yfmStats",
-  timer: "yfmTimer",
-  widgetPosition: "yfmWidgetPosition"
-};
+importScripts("shared.js");
 
-const DEFAULT_SETTINGS = {
-  studyMode: true,
-  hideShorts: true,
-  hideSidebar: true,
-  hideHomeFeed: true,
-  hideComments: false,
-  blockAutoplay: true,
-  strictMode: false,
-  blockScreen: true,
-  notificationsEnabled: true,
-  soundAlerts: true,
-  ambientEnabled: false,
-  ambientSound: "rain",
-  ambientVolume: 45,
-  dailyGoalMinutes: 120,
-  whitelistChannels: []
-};
-
-const DEFAULT_STATS = {
-  date: getTodayKey(),
-  totalStudyMsToday: 0,
-  avoidedMsToday: 0,
-  focusSessionsToday: 0,
-  streak: 0,
-  xp: 0,
-  lastFocusDate: "",
-  lastCompletedSessionId: "",
-  lastCompletedBreakSessionId: "",
-  history: {}
-};
-
-const DEFAULT_TIMER = {
-  phase: "focus",
-  focusMs: 25 * 60 * 1000,
-  breakMs: 5 * 60 * 1000,
-  durationMs: 25 * 60 * 1000,
-  remainingMs: 25 * 60 * 1000,
-  isRunning: false,
-  startedAt: 0,
-  endsAt: 0,
-  sessionId: ""
-};
+const TIMER_ALARM_NAME = "yfm-timer-complete";
+const BADGE_ALARM_NAME = "yfm-badge-tick";
 
 chrome.runtime.onInstalled.addListener(async () => {
   await ensureStorageDefaults();
+  await syncTimerAlarm();
 });
 
 chrome.runtime.onStartup.addListener(async () => {
   await ensureStorageDefaults();
   await resetDailyStatsIfNeeded();
+  await advanceTimerIfExpired();
+  await syncTimerAlarm();
+});
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === TIMER_ALARM_NAME) {
+    advanceTimerIfExpired();
+  }
+  if (alarm.name === BADGE_ALARM_NAME) {
+    getFreshTimer().then(updateBadge);
+  }
+});
+
+chrome.notifications.onClicked.addListener(async (notificationId) => {
+  if (!String(notificationId).startsWith("yfm-")) {
+    return;
+  }
+
+  chrome.notifications.clear(notificationId);
+  try {
+    const tabs = await chrome.tabs.query({
+      url: ["https://www.youtube.com/*", "https://m.youtube.com/*"]
+    });
+    if (tabs.length) {
+      await chrome.tabs.update(tabs[0].id, { active: true });
+      await chrome.windows.update(tabs[0].windowId, { focused: true });
+    } else {
+      await chrome.tabs.create({ url: "https://www.youtube.com/" });
+    }
+  } catch (_error) {
+    // Focus handoff is a nicety; never let it throw.
+  }
+});
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && changes[STORAGE_KEYS.timer]) {
+    scheduleTimerAlarm(normalizeTimer(changes[STORAGE_KEYS.timer].newValue));
+  }
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -72,13 +66,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
-  if (message.type === "YFM_FOCUS_SESSION_COMPLETE") {
-    completeFocusSession(message).then(sendResponse);
-    return true;
-  }
-
-  if (message.type === "YFM_BREAK_COMPLETE") {
-    notifyBreakComplete(message).then(sendResponse);
+  if (message.type === "YFM_TIMER_EXPIRED") {
+    advanceTimerIfExpired(message).then(sendResponse);
     return true;
   }
 
@@ -108,12 +97,42 @@ async function ensureStorageDefaults() {
   next[STORAGE_KEYS.timer] = normalizeTimer(current[STORAGE_KEYS.timer]);
   next[STORAGE_KEYS.widgetPosition] = normalizePosition(current[STORAGE_KEYS.widgetPosition]);
 
-  await chrome.storage.local.set(next);
+  // Only write when a value actually changed. This runs on every state read,
+  // and a blind write would churn storage.onChanged listeners (and the
+  // popup/content re-renders they trigger) once per activity tick.
+  const changed = Object.keys(next).some(
+    (key) => !isDeepEqual(current[key], next[key])
+  );
+  if (changed) {
+    await chrome.storage.local.set(next);
+  }
+}
+
+function isDeepEqual(a, b) {
+  if (a === b) {
+    return true;
+  }
+  if (typeof a !== typeof b || a === null || b === null) {
+    return false;
+  }
+  if (typeof a !== "object") {
+    return false;
+  }
+  if (Array.isArray(a) !== Array.isArray(b)) {
+    return false;
+  }
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) {
+    return false;
+  }
+  return aKeys.every((key) => isDeepEqual(a[key], b[key]));
 }
 
 async function getState() {
   await ensureStorageDefaults();
   await resetDailyStatsIfNeeded();
+  await advanceTimerIfExpired();
   const current = await chrome.storage.local.get(Object.values(STORAGE_KEYS));
   return {
     settings: normalizeSettings(current[STORAGE_KEYS.settings]),
@@ -132,6 +151,7 @@ async function trackActivity(message) {
   const nextStats = recordHistory({
     ...stats,
     totalStudyMsToday: stats.totalStudyMsToday + studyMs,
+    totalStudyMsAllTime: stats.totalStudyMsAllTime + studyMs,
     avoidedMsToday: stats.avoidedMsToday + avoidedMs
   }, { studyMs, avoidedMs, sessions: 0, xp: 0 });
 
@@ -139,33 +159,44 @@ async function trackActivity(message) {
   return { ok: true, stats: nextStats };
 }
 
-async function completeFocusSession(message) {
+async function completeFocusSession({ sessionId, durationMs }) {
   await ensureStorageDefaults();
-  const sessionId = String(message.sessionId || "");
-  const durationMs = clampMs(message.durationMs, 3 * 60 * 60 * 1000);
+  sessionId = String(sessionId || "");
+  durationMs = clampMs(durationMs, 3 * 60 * 60 * 1000);
   const stats = await getFreshStats();
+  const settings = await getFreshSettings();
 
   if (!sessionId || stats.lastCompletedSessionId === sessionId) {
     return { ok: true, stats, duplicate: true };
   }
 
   const today = getTodayKey();
-  const wasAlreadyFocusedToday = stats.lastFocusDate === today;
-  const nextStreak = wasAlreadyFocusedToday
-    ? stats.streak
-    : getYesterdayKey() === stats.lastFocusDate
-      ? stats.streak + 1
-      : 1;
+  const xpEarned = computeFocusXp(durationMs);
+  const nextStreak = computeNextStreak(stats, today);
 
+  const totalStudyMsToday = stats.totalStudyMsToday + durationMs;
   const nextStats = recordHistory({
     ...stats,
-    totalStudyMsToday: stats.totalStudyMsToday + durationMs,
+    totalStudyMsToday,
+    totalStudyMsAllTime: stats.totalStudyMsAllTime + durationMs,
     focusSessionsToday: stats.focusSessionsToday + 1,
     streak: nextStreak,
-    xp: stats.xp + 25,
+    bestStreak: Math.max(stats.bestStreak, nextStreak),
+    xp: stats.xp + xpEarned,
     lastFocusDate: today,
-    lastCompletedSessionId: sessionId
-  }, { studyMs: durationMs, avoidedMs: 0, sessions: 1, xp: 25 });
+    lastCompletedSessionId: sessionId,
+    lastCompletedBreakSessionId: "",
+    lastSessionReport: {
+      sessionId,
+      completedAt: Date.now(),
+      durationMs,
+      xpEarned,
+      streak: nextStreak,
+      totalStudyMsToday,
+      dailyGoalMinutes: settings.dailyGoalMinutes,
+      goalPercent: Math.min(100, Math.round((totalStudyMsToday / 60000 / settings.dailyGoalMinutes) * 100))
+    }
+  }, { studyMs: durationMs, avoidedMs: 0, sessions: 1, xp: xpEarned });
 
   await chrome.storage.local.set({ [STORAGE_KEYS.stats]: nextStats });
   await notifyFocusComplete();
@@ -184,8 +215,8 @@ async function notifyFocusComplete() {
   });
 }
 
-async function notifyBreakComplete(message = {}) {
-  const sessionId = String(message.sessionId || "");
+async function notifyBreakComplete(sessionId) {
+  sessionId = String(sessionId || "");
   const stats = await getFreshStats();
   if (sessionId && stats.lastCompletedBreakSessionId === sessionId) {
     return { ok: true, notified: false, duplicate: true };
@@ -304,39 +335,133 @@ async function startPauseTimer() {
   await chrome.storage.local.set({ [STORAGE_KEYS.timer]: nextTimer });
 }
 
-function startTimer(timer) {
-  const remainingMs = getTimerRemainingMs(timer) || getPhaseDuration(timer, timer.phase);
-  const now = Date.now();
-  return normalizeTimer({
-    ...timer,
-    durationMs: getPhaseDuration(timer, timer.phase),
-    remainingMs,
-    isRunning: true,
-    startedAt: now,
-    endsAt: now + remainingMs,
-    sessionId: timer.sessionId || createSessionId()
+async function syncTimerAlarm() {
+  await scheduleTimerAlarm(await getFreshTimer());
+}
+
+async function scheduleTimerAlarm(timer) {
+  await updateBadge(timer);
+
+  if (!chrome.alarms?.create) {
+    return;
+  }
+
+  if (!timer.isRunning || !timer.endsAt) {
+    await chrome.alarms.clear(TIMER_ALARM_NAME);
+    return;
+  }
+
+  chrome.alarms.create(TIMER_ALARM_NAME, {
+    when: Math.max(Date.now() + 1000, timer.endsAt)
   });
+}
+
+// Keeps the toolbar badge in sync with the timer: a live countdown while
+// running, a pause mark for partially used sessions, blank when idle.
+async function updateBadge(timer) {
+  if (!chrome.action?.setBadgeText) {
+    return;
+  }
+
+  try {
+    if (!timer.isRunning) {
+      await chrome.alarms.clear(BADGE_ALARM_NAME);
+      const phaseDuration = getPhaseDuration(timer, timer.phase);
+      const isPausedMidSession = timer.remainingMs > 0 && timer.remainingMs < phaseDuration;
+      await chrome.action.setBadgeText({ text: isPausedMidSession ? "||" : "" });
+      return;
+    }
+
+    chrome.alarms.create(BADGE_ALARM_NAME, { periodInMinutes: 0.5 });
+    const remaining = getTimerRemainingMs(timer);
+    const text = remaining >= 60000
+      ? `${Math.ceil(remaining / 60000)}m`
+      : `${Math.max(1, Math.ceil(remaining / 1000))}s`;
+    await chrome.action.setBadgeText({ text });
+    await chrome.action.setBadgeBackgroundColor({
+      color: timer.phase === "focus" ? "#1f8f66" : "#3b6ea5"
+    });
+  } catch (_error) {
+    // Badge cosmetics must never break timer bookkeeping.
+  }
+}
+
+// The single owner of timer phase transitions. The popup and content script
+// only report expiry (YFM_TIMER_EXPIRED); they never write the next phase.
+async function advanceTimerIfExpired(message = {}) {
+  const timer = await getFreshTimer();
+  if (!timer.isRunning || getTimerRemainingMs(timer) > 0) {
+    await scheduleTimerAlarm(timer);
+    return timer;
+  }
+
+  // A stale expiry report for a session that already advanced.
+  if (message.sessionId && timer.sessionId && message.sessionId !== timer.sessionId) {
+    return timer;
+  }
+
+  const completed = { ...timer };
+  const settings = await getFreshSettings();
+  const now = Date.now();
+
+  let nextPhase;
+  let nextDuration;
+  let nextIsLongBreak = false;
+  let nextCycleCount = completed.cycleCount || 0;
+
+  if (completed.phase === "focus") {
+    const phaseDuration = completed.durationMs || getPhaseDuration(completed, "focus");
+    // Credit actual elapsed time, not the configured duration, so editing
+    // session lengths mid-run cannot inflate stats.
+    const elapsedMs = clampMs(
+      completed.startedAt ? now - completed.startedAt : phaseDuration,
+      phaseDuration
+    );
+    await completeFocusSession({ sessionId: completed.sessionId, durationMs: elapsedMs });
+
+    nextPhase = "break";
+    nextCycleCount += 1;
+    const dueForLongBreak = nextCycleCount % settings.sessionsUntilLongBreak === 0;
+    if (dueForLongBreak) {
+      nextIsLongBreak = true;
+      nextDuration = settings.longBreakMinutes * 60 * 1000;
+      nextCycleCount = 0;
+    } else {
+      nextDuration = completed.breakMs;
+    }
+  } else {
+    await notifyBreakComplete(completed.sessionId);
+    nextPhase = "focus";
+    nextDuration = completed.focusMs;
+  }
+
+  // Breaks always start on their own; the next focus block only auto-starts
+  // when the user opts in.
+  const autoRun = nextPhase === "break" || settings.autoStartNextFocus;
+  const nextTimer = normalizeTimer({
+    ...completed,
+    phase: nextPhase,
+    durationMs: nextDuration,
+    remainingMs: nextDuration,
+    isRunning: autoRun,
+    startedAt: autoRun ? now : 0,
+    endsAt: autoRun ? now + nextDuration : 0,
+    isLongBreak: nextIsLongBreak,
+    cycleCount: nextCycleCount,
+    sessionId: createSessionId()
+  });
+
+  await chrome.storage.local.set({ [STORAGE_KEYS.timer]: nextTimer });
+  await scheduleTimerAlarm(nextTimer);
+  return nextTimer;
+}
+
+function startTimer(timer) {
+  return buildStartedTimer(timer);
 }
 
 function pauseTimer(timer) {
-  return normalizeTimer({
-    ...timer,
-    remainingMs: getTimerRemainingMs(timer),
-    isRunning: false,
-    startedAt: 0,
-    endsAt: 0
-  });
-}
-
-function getPhaseDuration(timer, phase) {
-  return phase === "break" ? timer.breakMs : timer.focusMs;
-}
-
-function getTimerRemainingMs(timer) {
-  if (!timer.isRunning || !timer.endsAt) {
-    return Math.max(0, timer.remainingMs);
-  }
-  return Math.max(0, timer.endsAt - Date.now());
+  return buildPausedTimer(timer);
 }
 
 function recordHistory(stats, increment) {
@@ -360,120 +485,4 @@ function recordHistory(stats, increment) {
       }
     }
   };
-}
-
-function normalizeSettings(settings = {}) {
-  return {
-    ...DEFAULT_SETTINGS,
-    ...settings,
-    strictMode: Boolean(settings.strictMode),
-    blockScreen: settings.blockScreen !== false,
-    notificationsEnabled: settings.notificationsEnabled !== false,
-    soundAlerts: settings.soundAlerts !== false,
-    ambientVolume: clampNumber(settings.ambientVolume, 0, 100, DEFAULT_SETTINGS.ambientVolume),
-    dailyGoalMinutes: clampNumber(settings.dailyGoalMinutes, 15, 600, DEFAULT_SETTINGS.dailyGoalMinutes),
-    ambientSound: ["rain", "cafe", "white-noise", "forest"].includes(settings.ambientSound)
-      ? settings.ambientSound
-      : DEFAULT_SETTINGS.ambientSound,
-    whitelistChannels: Array.isArray(settings.whitelistChannels)
-      ? uniqueChannels(settings.whitelistChannels)
-      : []
-  };
-}
-
-function normalizeStats(stats = {}) {
-  return {
-    ...DEFAULT_STATS,
-    ...stats,
-    totalStudyMsToday: Number(stats.totalStudyMsToday) || 0,
-    avoidedMsToday: Number(stats.avoidedMsToday) || 0,
-    focusSessionsToday: Number(stats.focusSessionsToday) || 0,
-    streak: Number(stats.streak) || 0,
-    xp: Number(stats.xp) || 0,
-    history: normalizeHistory(stats.history)
-  };
-}
-
-function normalizeTimer(timer = {}) {
-  return {
-    ...DEFAULT_TIMER,
-    ...timer,
-    focusMs: numberOrDefault(timer.focusMs, DEFAULT_TIMER.focusMs),
-    breakMs: numberOrDefault(timer.breakMs, DEFAULT_TIMER.breakMs),
-    durationMs: numberOrDefault(timer.durationMs, DEFAULT_TIMER.durationMs),
-    remainingMs: numberOrDefault(timer.remainingMs, DEFAULT_TIMER.remainingMs)
-  };
-}
-
-function normalizePosition(position = {}) {
-  return {
-    x: Number(position.x) || 24,
-    y: Number(position.y) || 96
-  };
-}
-
-function normalizeHistory(history = {}) {
-  const result = {};
-  for (const [date, value] of Object.entries(history || {})) {
-    result[date] = {
-      studyMs: Number(value.studyMs) || 0,
-      avoidedMs: Number(value.avoidedMs) || 0,
-      sessions: Number(value.sessions) || 0,
-      xp: Number(value.xp) || 0
-    };
-  }
-  return result;
-}
-
-function uniqueChannels(channels) {
-  const seen = new Set();
-  const result = [];
-  for (const channel of channels) {
-    const clean = String(channel || "").trim().replace(/\s+/g, " ");
-    const key = clean.replace(/^@/, "").toLowerCase();
-    if (clean && !seen.has(key)) {
-      seen.add(key);
-      result.push(clean);
-    }
-  }
-  return result;
-}
-
-function clampMs(value, max) {
-  const numeric = Number(value) || 0;
-  return Math.max(0, Math.min(numeric, max));
-}
-
-function clampNumber(value, min, max, fallback) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) {
-    return fallback;
-  }
-  return Math.max(min, Math.min(max, numeric));
-}
-
-function numberOrDefault(value, fallback) {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : fallback;
-}
-
-function createSessionId() {
-  if (crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
-function getTodayKey(date = new Date()) {
-  return [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, "0"),
-    String(date.getDate()).padStart(2, "0")
-  ].join("-");
-}
-
-function getYesterdayKey() {
-  const date = new Date();
-  date.setDate(date.getDate() - 1);
-  return getTodayKey(date);
 }

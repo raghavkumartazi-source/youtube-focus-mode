@@ -1,50 +1,8 @@
 (function () {
   "use strict";
 
-  const STORAGE_KEYS = {
-    settings: "yfmSettings",
-    timer: "yfmTimer",
-    widgetPosition: "yfmWidgetPosition"
-  };
-
-  const DEFAULT_SETTINGS = {
-    studyMode: true,
-    hideShorts: true,
-    hideSidebar: true,
-    hideHomeFeed: true,
-    hideComments: false,
-    blockAutoplay: true,
-    strictMode: false,
-    blockScreen: true,
-    notificationsEnabled: true,
-    soundAlerts: true,
-    ambientEnabled: false,
-    ambientSound: "rain",
-    ambientVolume: 45,
-    dailyGoalMinutes: 120,
-    whitelistChannels: []
-  };
-
-  const DEFAULT_TIMER = {
-    phase: "focus",
-    focusMs: 25 * 60 * 1000,
-    breakMs: 5 * 60 * 1000,
-    durationMs: 25 * 60 * 1000,
-    remainingMs: 25 * 60 * 1000,
-    isRunning: false,
-    startedAt: 0,
-    endsAt: 0,
-    sessionId: ""
-  };
-
-  const QUOTES = [
-    "Stay with the lesson.",
-    "The sidebar can wait.",
-    "One focused block at a time.",
-    "Make this video count.",
-    "Protect the next 25 minutes.",
-    "Learn first. Browse later."
-  ];
+  let settings = { ...DEFAULT_SETTINGS };
+  let timer = { ...DEFAULT_TIMER };
 
   const SHORTS_SELECTORS = [
     "ytd-rich-shelf-renderer[is-shorts]",
@@ -53,13 +11,18 @@
     "ytd-mini-guide-entry-renderer a[title='Shorts']",
     "ytd-guide-entry-renderer a[title='Shorts']",
     "a[href^='/shorts']",
-    "a[href*='youtube.com/shorts']"
+    "a[href*='youtube.com/shorts']",
+    "ytm-rich-shelf-renderer[is-shorts]",
+    "ytm-reel-shelf-renderer",
+    "ytm-shorts-card"
   ];
 
   const SIDEBAR_SELECTORS = [
     "ytd-watch-flexy #secondary",
     "ytd-watch-flexy #related",
-    "ytd-watch-next-secondary-results-renderer"
+    "ytd-watch-next-secondary-results-renderer",
+    "ytm-watch #related",
+    "ytm-single-column-watch-next-results-renderer"
   ];
 
   const HOME_FEED_SELECTORS = [
@@ -67,13 +30,17 @@
     "ytd-browse[page-subtype='home'] #contents.ytd-rich-grid-renderer",
     "ytd-browse[page-subtype='home'] #primary ytd-two-column-browse-results-renderer",
     "ytd-browse[page-subtype='home'] ytd-video-renderer",
-    "ytd-browse[page-subtype='home'] ytd-grid-video-renderer"
+    "ytd-browse[page-subtype='home'] ytd-grid-video-renderer",
+    "ytm-browse[page-subtype='home'] ytm-rich-grid-renderer",
+    "ytm-home #contents.ytm-rich-grid-renderer"
   ];
 
   const COMMENT_SELECTORS = [
     "ytd-watch-flexy #comments",
     "ytd-comments",
-    "#comments"
+    "#comments",
+    "ytm-watch #comments",
+    "ytm-comments"
   ];
 
   const GUIDE_HIDE_SELECTORS = [
@@ -81,23 +48,29 @@
     "ytd-mini-guide-entry-renderer a[href='/shorts']",
     "ytd-guide-entry-renderer a[href='/feed/explore']",
     "ytd-guide-entry-renderer a[href='/feed/trending']",
-    "ytd-mini-guide-entry-renderer a[href='/feed/explore']"
+    "ytd-mini-guide-entry-renderer a[href='/feed/explore']",
+    "ytm-guide-entry-renderer a[href='/shorts']",
+    "ytm-mini-guide-entry-renderer a[href='/shorts']",
+    "ytm-guide-entry-renderer a[href='/feed/explore']",
+    "ytm-guide-entry-renderer a[href='/feed/trending']"
   ];
 
-  let settings = { ...DEFAULT_SETTINGS };
-  let timer = { ...DEFAULT_TIMER };
   let widgetPosition = { x: 24, y: 96 };
   let observer = null;
   let applyQueued = false;
   let hiddenThisPass = 0;
   let lastActivityTrack = Date.now();
+  let lastUserActivity = Date.now();
   let lastAutoplayClick = 0;
+  let lastAvoidedCreditUrl = "";
+  let lastAvoidedCreditAt = 0;
   let lastUrl = location.href;
   let widget = null;
   let shadow = null;
   let widgetEls = {};
   let widgetTicker = null;
   let ambient = null;
+  let ambientStarting = false;
   let ambientSignature = "";
   let quoteToastTimer = null;
 
@@ -117,6 +90,7 @@
     applyFocusMode();
     startActivityTracking();
     startWidgetTicker();
+    syncAmbientFromSetting();
 
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area !== "local") {
@@ -128,7 +102,19 @@
         syncAmbientFromSetting();
       }
       if (changes[STORAGE_KEYS.timer]) {
+        const previous = timer;
         timer = normalizeTimer(changes[STORAGE_KEYS.timer].newValue);
+        // The background owns phase transitions; celebrate when one lands.
+        if (previous.isRunning && previous.phase !== timer.phase) {
+          playAlertTone();
+          showQuoteToast(
+            timer.phase === "break"
+              ? timer.isLongBreak
+                ? "Focus session complete. Enjoy your long break."
+                : "Focus session complete. XP added."
+              : "Break complete. Ready for the next focus block."
+          );
+        }
       }
       if (changes[STORAGE_KEYS.widgetPosition]) {
         widgetPosition = normalizePosition(changes[STORAGE_KEYS.widgetPosition].newValue);
@@ -213,7 +199,7 @@
       }
 
       #yfm-home-empty-state span {
-        color: #9aa5b5;
+        color: #aab6c6;
         font-size: 14px;
       }
 
@@ -249,7 +235,7 @@
       }
 
       #yfm-block-screen p {
-        color: #9aa5b5;
+        color: #aab6c6;
         font-size: 15px;
         line-height: 1.5;
         margin: 0 0 18px;
@@ -313,9 +299,16 @@
   }
 
   function bindGlobalEvents() {
+    for (const eventName of ["keydown", "pointerdown", "scroll", "wheel"]) {
+      document.addEventListener(eventName, () => {
+        lastUserActivity = Date.now();
+      }, { passive: true, capture: true });
+    }
+
     document.addEventListener(
       "click",
       (event) => {
+        lastUserActivity = Date.now();
         if (!settings.studyMode || !settings.hideShorts) {
           return;
         }
@@ -327,7 +320,7 @@
 
         event.preventDefault();
         event.stopPropagation();
-        trackActivity(0, 5 * 60 * 1000);
+        creditAvoidedTime(5 * 60 * 1000);
         if (settings.blockScreen) {
           ensureBlockScreen("Shorts are blocked in Study Mode.", "Open a study video from search or subscriptions instead.");
         } else {
@@ -366,52 +359,64 @@
   }
 
   function applyFocusMode() {
-    document.documentElement.dataset.yfmStudyMode = settings.studyMode ? "on" : "off";
+    // Pause the observer while we mutate the DOM so our own class and
+    // attribute changes cannot retrigger the hide pass in a hot loop.
+    if (observer) {
+      observer.disconnect();
+    }
 
-    if (!settings.studyMode) {
+    try {
+      document.documentElement.dataset.yfmStudyMode = settings.studyMode ? "on" : "off";
+
+      if (!settings.studyMode) {
+        restoreHiddenElements();
+        removeHomeEmptyState();
+        removeBlockScreen();
+        updateWidgetVisibility();
+        return;
+      }
+
       restoreHiddenElements();
-      removeHomeEmptyState();
+      hiddenThisPass = 0;
+      const currentWhitelisted = isCurrentChannelWhitelisted();
+
+      if (handleBlockedPage()) {
+        updateWidgetVisibility();
+        return;
+      }
+
       removeBlockScreen();
+
+      if (settings.hideShorts) {
+        hideShorts();
+      }
+
+      hideGuideDistractions();
+
+      if (settings.hideSidebar && !currentWhitelisted) {
+        hideSelectors(SIDEBAR_SELECTORS, "sidebar");
+      }
+
+      if (settings.hideHomeFeed) {
+        hideHomeFeed();
+      } else {
+        removeHomeEmptyState();
+      }
+
+      if (settings.hideComments && !currentWhitelisted) {
+        hideSelectors(COMMENT_SELECTORS, "comments");
+      }
+
+      if (settings.blockAutoplay && !currentWhitelisted) {
+        blockAutoplay();
+      }
+
       updateWidgetVisibility();
-      return;
+    } finally {
+      if (observer) {
+        observer.observe(document.documentElement, { childList: true, subtree: true });
+      }
     }
-
-    restoreHiddenElements();
-    hiddenThisPass = 0;
-    const currentWhitelisted = isCurrentChannelWhitelisted();
-
-    if (handleBlockedPage()) {
-      updateWidgetVisibility();
-      return;
-    }
-
-    removeBlockScreen();
-
-    if (settings.hideShorts) {
-      hideShorts();
-    }
-
-    hideGuideDistractions();
-
-    if (settings.hideSidebar && !currentWhitelisted) {
-      hideSelectors(SIDEBAR_SELECTORS, "sidebar");
-    }
-
-    if (settings.hideHomeFeed) {
-      hideHomeFeed();
-    } else {
-      removeHomeEmptyState();
-    }
-
-    if (settings.hideComments && !currentWhitelisted) {
-      hideSelectors(COMMENT_SELECTORS, "comments");
-    }
-
-    if (settings.blockAutoplay && !currentWhitelisted) {
-      blockAutoplay();
-    }
-
-    updateWidgetVisibility();
   }
 
   function hideShorts() {
@@ -484,7 +489,7 @@
 
   function handleBlockedPage() {
     if (settings.hideShorts && isShortsHref(location.href)) {
-      trackActivity(0, 5 * 60 * 1000);
+      creditAvoidedTime(5 * 60 * 1000);
       if (settings.blockScreen) {
         ensureBlockScreen("Shorts are blocked in Study Mode.", "Open subscriptions or search for the lesson you came to watch.");
       } else {
@@ -495,7 +500,7 @@
     }
 
     if (settings.strictMode && isStrictBlockedPage()) {
-      trackActivity(0, 3 * 60 * 1000);
+      creditAvoidedTime(3 * 60 * 1000);
       ensureBlockScreen("Strict Mode is protecting your focus.", "Only search, subscriptions, and the current video stay available.");
       return true;
     }
@@ -505,7 +510,9 @@
 
   function blockAutoplay() {
     const now = Date.now();
-    if (now - lastAutoplayClick < 3000) {
+    // Long cooldown: YouTube updates the toggle asynchronously, and clicking
+    // again too soon could flip a freshly disabled toggle back on.
+    if (now - lastAutoplayClick < 15000) {
       return;
     }
 
@@ -610,18 +617,21 @@
       "ytd-video-owner-renderer #channel-name a",
       "ytd-video-owner-renderer ytd-channel-name a",
       "#owner #channel-name a",
-      "meta[itemprop='channelId']"
+      "ytd-channel-name a"
     ];
 
     for (const selector of selectors) {
-      const node = document.querySelector(selector);
-      const value = node?.textContent || node?.getAttribute?.("content");
-      if (value && value.trim()) {
+      const value = document.querySelector(selector)?.textContent;
+      if (value && value.trim() && !looksLikeChannelId(value.trim())) {
         return value.trim();
       }
     }
 
     return "";
+  }
+
+  function looksLikeChannelId(value) {
+    return /^UC[A-Za-z0-9_-]{22}$/.test(value);
   }
 
   function isHomePage() {
@@ -671,13 +681,13 @@
         }
 
         .widget {
-          backdrop-filter: blur(18px);
-          background: rgba(12, 15, 20, 0.88);
-          border: 1px solid rgba(255, 255, 255, 0.14);
-          border-radius: 8px;
-          box-shadow: 0 18px 60px rgba(0, 0, 0, 0.38);
+          backdrop-filter: blur(20px);
+          background: rgba(7, 9, 13, 0.9);
+          border: 1px solid rgba(255, 255, 255, 0.13);
+          border-radius: 10px;
+          box-shadow: 0 22px 70px rgba(0, 0, 0, 0.52), 0 0 0 1px rgba(114, 228, 180, 0.08);
           box-sizing: border-box;
-          color: #f5f7fb;
+          color: #f2f6fc;
           min-width: 236px;
           overflow: hidden;
           user-select: none;
@@ -712,6 +722,28 @@
           font-size: 11px;
           font-weight: 800;
           padding: 4px 8px;
+        }
+
+        .head-close {
+          align-items: center;
+          background: transparent;
+          border: 0;
+          border-radius: 6px;
+          color: #aab6c6;
+          cursor: pointer;
+          display: inline-flex;
+          font-size: 16px;
+          height: 24px;
+          justify-content: center;
+          line-height: 1;
+          padding: 0;
+          transition: color 160ms ease, background 160ms ease;
+          width: 24px;
+        }
+
+        .head-close:hover {
+          background: rgba(255, 255, 255, 0.12);
+          color: #f5f7fb;
         }
 
         .body {
@@ -754,11 +786,12 @@
           stroke-dasharray: 276.46;
           stroke-dashoffset: 0;
           stroke-linecap: round;
+          filter: drop-shadow(0 0 5px rgba(114, 228, 180, 0.55));
           transition: stroke-dashoffset 220ms ease;
         }
 
         .ring span {
-          color: #9aa5b5;
+          color: #aab6c6;
           font-size: 10px;
           font-weight: 900;
           position: absolute;
@@ -773,7 +806,7 @@
         }
 
         .quote {
-          color: #9aa5b5;
+          color: #aab6c6;
           font-size: 12px;
           line-height: 1.35;
           margin: 0 0 12px;
@@ -868,6 +901,7 @@
         <div class="head" data-drag-handle>
           <span class="label">YouTube Focus</span>
           <span class="mode" data-phase>Focus</span>
+          <button class="head-close" type="button" data-close title="Hide widget" aria-label="Hide focus widget">×</button>
         </div>
         <div class="body">
           <div class="timer-face">
@@ -880,8 +914,7 @@
             </div>
             <strong class="time" data-time>25:00</strong>
           </div>
-          <p class="quote" data-quote>Stay with the lesson.</p>
-          <div class="actions">
+          <p class="quote" data-quote>Stay with the lesson.</p>          <div class="actions">
             <button class="primary" type="button" data-start>Start</button>
             <button class="icon" type="button" data-reset title="Reset timer" aria-label="Reset timer">↻</button>
             <button class="icon" type="button" data-ambient title="Ambient sound" aria-label="Ambient sound">♪</button>
@@ -905,7 +938,8 @@
       reset: shadow.querySelector("[data-reset]"),
       ambient: shadow.querySelector("[data-ambient]"),
       toast: shadow.querySelector("[data-toast]"),
-      handle: shadow.querySelector("[data-drag-handle]")
+      handle: shadow.querySelector("[data-drag-handle]"),
+      close: shadow.querySelector("[data-close]")
     };
 
     widgetEls.start.addEventListener("click", () => {
@@ -917,6 +951,13 @@
     });
     widgetEls.reset.addEventListener("click", resetTimer);
     widgetEls.ambient.addEventListener("click", toggleAmbient);
+
+    // The close button lives inside the drag handle, so it must swallow the
+    // pointer event or dragging starts the moment you reach for it.
+    widgetEls.close.addEventListener("pointerdown", (event) => {
+      event.stopPropagation();
+    });
+    widgetEls.close.addEventListener("click", hideWidget);
     bindWidgetDrag();
     positionWidget();
     renderWidget();
@@ -982,7 +1023,13 @@
     if (!widget) {
       return;
     }
-    widget.style.display = settings.studyMode ? "block" : "none";
+    widget.style.display = settings.studyMode && settings.widgetEnabled ? "block" : "none";
+  }
+
+  async function hideWidget() {
+    settings = normalizeSettings({ ...settings, widgetEnabled: false });
+    await chrome.storage.local.set({ [STORAGE_KEYS.settings]: settings });
+    updateWidgetVisibility();
   }
 
   function startWidgetTicker() {
@@ -990,7 +1037,7 @@
       clearInterval(widgetTicker);
     }
     widgetTicker = setInterval(() => {
-      handleTimerCompletion();
+      checkTimerExpiry();
       renderWidget();
     }, 1000);
   }
@@ -1000,13 +1047,13 @@
       return;
     }
     const remainingMs = getTimerRemainingMs(timer);
-    const durationMs = Math.max(1, timer.durationMs || getPhaseDuration(timer.phase));
+    const durationMs = Math.max(1, timer.durationMs || getPhaseDuration(timer, timer.phase));
     const progress = Math.max(0, Math.min(1, remainingMs / durationMs));
     const circumference = 2 * Math.PI * 44;
-    widgetEls.phase.textContent = timer.phase === "break" ? "Break" : "Focus";
+    widgetEls.phase.textContent = getPhaseLabel(timer);
     widgetEls.time.textContent = formatClock(remainingMs);
     widgetEls.start.textContent = timer.isRunning ? "Pause" : "Start";
-    widgetEls.quote.textContent = QUOTES[getQuoteIndex()];
+    widgetEls.quote.textContent = getWidgetQuote();
     widgetEls.ambient.classList.toggle("active", settings.ambientEnabled);
     widgetEls.progress.style.strokeDasharray = String(circumference);
     widgetEls.progress.style.strokeDashoffset = String(circumference * (1 - progress));
@@ -1014,98 +1061,42 @@
   }
 
   async function startTimer() {
-    const remainingMs = getTimerRemainingMs(timer) || getPhaseDuration(timer.phase);
-    const now = Date.now();
-    timer = normalizeTimer({
-      ...timer,
-      durationMs: getPhaseDuration(timer.phase),
-      remainingMs,
-      isRunning: true,
-      startedAt: now,
-      endsAt: now + remainingMs,
-      sessionId: timer.sessionId || createSessionId()
-    });
+    timer = buildStartedTimer(timer);
     await chrome.storage.local.set({ [STORAGE_KEYS.timer]: timer });
     renderWidget();
   }
 
   async function pauseTimer() {
-    timer = normalizeTimer({
-      ...timer,
-      remainingMs: getTimerRemainingMs(timer),
-      isRunning: false,
-      startedAt: 0,
-      endsAt: 0
-    });
+    timer = buildPausedTimer(timer);
     await chrome.storage.local.set({ [STORAGE_KEYS.timer]: timer });
     renderWidget();
   }
 
   async function resetTimer() {
-    const durationMs = getPhaseDuration(timer.phase);
-    timer = normalizeTimer({
-      ...timer,
-      durationMs,
-      remainingMs: durationMs,
-      isRunning: false,
-      startedAt: 0,
-      endsAt: 0,
-      sessionId: createSessionId()
-    });
+    timer = buildResetTimer(timer);
     await chrome.storage.local.set({ [STORAGE_KEYS.timer]: timer });
     renderWidget();
   }
 
-  async function handleTimerCompletion() {
+  function checkTimerExpiry() {
     if (!timer.isRunning || getTimerRemainingMs(timer) > 0) {
       return;
     }
-
-    const completed = { ...timer };
-    const nextPhase = completed.phase === "focus" ? "break" : "focus";
-    const nextDuration = nextPhase === "focus" ? completed.focusMs : completed.breakMs;
-
-    if (completed.phase === "focus") {
-      await sendRuntimeMessage({
-        type: "YFM_FOCUS_SESSION_COMPLETE",
-        sessionId: completed.sessionId,
-        durationMs: completed.durationMs || completed.focusMs
-      }).catch(() => null);
-      playAlertTone();
-      showQuoteToast("Focus session complete. XP added.");
-    } else {
-      await sendRuntimeMessage({
-        type: "YFM_BREAK_COMPLETE",
-        sessionId: completed.sessionId
-      }).catch(() => null);
-      playAlertTone();
-      showQuoteToast("Break complete. Ready for the next focus block.");
-    }
-
-    timer = normalizeTimer({
-      ...completed,
-      phase: nextPhase,
-      durationMs: nextDuration,
-      remainingMs: nextDuration,
-      isRunning: nextPhase === "break",
-      startedAt: nextPhase === "break" ? Date.now() : 0,
-      endsAt: nextPhase === "break" ? Date.now() + nextDuration : 0,
-      sessionId: createSessionId()
-    });
-
-    await chrome.storage.local.set({ [STORAGE_KEYS.timer]: timer });
-    renderWidget();
+    // The background worker owns phase transitions; it dedupes by session id.
+    sendRuntimeMessage({ type: "YFM_TIMER_EXPIRED", sessionId: timer.sessionId }).catch(() => null);
   }
 
-  function getPhaseDuration(phase) {
-    return phase === "break" ? timer.breakMs : timer.focusMs;
-  }
-
-  function getTimerRemainingMs(nextTimer) {
-    if (!nextTimer.isRunning || !nextTimer.endsAt) {
-      return Math.max(0, nextTimer.remainingMs);
+  // Credits distraction-avoided time at most once per page visit (and at
+  // most every 5 minutes on the same URL) so a chatty DOM cannot inflate
+  // the avoided-time stat.
+  function creditAvoidedTime(ms) {
+    const now = Date.now();
+    if (location.href === lastAvoidedCreditUrl && now - lastAvoidedCreditAt < 5 * 60 * 1000) {
+      return;
     }
-    return Math.max(0, nextTimer.endsAt - Date.now());
+    lastAvoidedCreditUrl = location.href;
+    lastAvoidedCreditAt = now;
+    trackActivity(0, ms);
   }
 
   async function toggleAmbient() {
@@ -1134,17 +1125,24 @@
     }
   }
 
-  function startAmbientSound() {
+  async function startAmbientSound() {
+    if (ambientStarting) {
+      return;
+    }
+
+    ambientStarting = true;
     try {
       if (!ambient) {
         ambient = createAmbientSound();
         ambientSignature = `${settings.ambientSound}:${settings.ambientVolume}`;
       }
-      ambient.start();
+      await ambient.start();
     } catch (_error) {
       settings.ambientEnabled = false;
       chrome.storage.local.set({ [STORAGE_KEYS.settings]: settings });
       showQuoteToast("Click the sound button again to start ambient audio.");
+    } finally {
+      ambientStarting = false;
     }
   }
 
@@ -1194,17 +1192,18 @@
         }
       },
       stop() {
-        if (!source) {
-          return;
+        if (source) {
+          source.stop();
+          source.disconnect();
+          source = null;
         }
-        source.stop();
-        source.disconnect();
         source = null;
         try {
           tone.stop();
         } catch (_error) {
           // Oscillators can only be stopped once.
         }
+        context.close?.();
       }
     };
   }
@@ -1254,7 +1253,9 @@
       const oscillator = context.createOscillator();
       const gain = context.createGain();
       oscillator.type = "sine";
-      oscillator.frequency.value = timer.phase === "focus" ? 740 : 520;
+      // Fires after the background advanced the phase, so "break" means a
+      // focus session just completed (higher chime).
+      oscillator.frequency.value = timer.phase === "break" ? 740 : 520;
       gain.gain.setValueAtTime(0.001, context.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.08, context.currentTime + 0.03);
       gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + 0.45);
@@ -1283,8 +1284,9 @@
       }
 
       const focusTimerRunning = timer.isRunning && timer.phase === "focus";
-      const studyMs = focusTimerRunning ? 0 : delta;
-      const avoidedMs = hiddenThisPass > 0
+      const engaged = isStudyPlaybackActive() || wasRecentlyActive();
+      const studyMs = focusTimerRunning || !engaged ? 0 : delta;
+      const avoidedMs = engaged && hiddenThisPass > 0
         ? Math.min(delta, Math.round(delta * 0.35 + hiddenThisPass * 150))
         : 0;
 
@@ -1302,113 +1304,24 @@
     }).catch(() => null);
   }
 
+  function isStudyPlaybackActive() {
+    const video = document.querySelector("video");
+    return Boolean(video && !video.paused && !video.ended && video.readyState >= 2);
+  }
+
+  function wasRecentlyActive() {
+    return Date.now() - lastUserActivity < 5 * 60 * 1000;
+  }
+
   function showQuoteToast(message) {
     if (!widgetEls.toast) {
       return;
     }
-    widgetEls.toast.textContent = message || QUOTES[getQuoteIndex()];
+    widgetEls.toast.textContent = message || getWidgetQuote();
     widgetEls.toast.classList.add("show");
     clearTimeout(quoteToastTimer);
     quoteToastTimer = setTimeout(() => {
       widgetEls.toast.classList.remove("show");
     }, 3500);
-  }
-
-  function normalizeSettings(nextSettings = {}) {
-    return {
-      ...DEFAULT_SETTINGS,
-      ...nextSettings,
-      ambientVolume: clampNumber(nextSettings.ambientVolume, 0, 100, DEFAULT_SETTINGS.ambientVolume),
-      dailyGoalMinutes: clampNumber(nextSettings.dailyGoalMinutes, 15, 600, DEFAULT_SETTINGS.dailyGoalMinutes),
-      ambientSound: ["rain", "cafe", "white-noise", "forest"].includes(nextSettings.ambientSound)
-        ? nextSettings.ambientSound
-        : DEFAULT_SETTINGS.ambientSound,
-      whitelistChannels: uniqueChannels(nextSettings.whitelistChannels || [])
-    };
-  }
-
-  function normalizeTimer(nextTimer = {}) {
-    return {
-      ...DEFAULT_TIMER,
-      ...nextTimer,
-      focusMs: numberOrDefault(nextTimer.focusMs, DEFAULT_TIMER.focusMs),
-      breakMs: numberOrDefault(nextTimer.breakMs, DEFAULT_TIMER.breakMs),
-      durationMs: numberOrDefault(nextTimer.durationMs, DEFAULT_TIMER.durationMs),
-      remainingMs: numberOrDefault(nextTimer.remainingMs, DEFAULT_TIMER.remainingMs)
-    };
-  }
-
-  function normalizePosition(position = {}) {
-    return {
-      x: Number(position.x) || 24,
-      y: Number(position.y) || 96
-    };
-  }
-
-  function normalizeChannelName(channel) {
-    return String(channel || "")
-      .trim()
-      .replace(/^@/, "")
-      .replace(/\s+/g, " ")
-      .toLowerCase();
-  }
-
-  function uniqueChannels(channels) {
-    const seen = new Set();
-    const result = [];
-    for (const channel of channels) {
-      const clean = String(channel || "").trim().replace(/\s+/g, " ");
-      const key = normalizeChannelName(clean);
-      if (clean && !seen.has(key)) {
-        seen.add(key);
-        result.push(clean);
-      }
-    }
-    return result;
-  }
-
-  function formatClock(ms) {
-    const totalSeconds = Math.ceil(ms / 1000);
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-  }
-
-  function getQuoteIndex() {
-    const minutes = Math.floor(Date.now() / 60000);
-    return minutes % QUOTES.length;
-  }
-
-  function createSessionId() {
-    if (crypto.randomUUID) {
-      return crypto.randomUUID();
-    }
-    return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  }
-
-  function numberOrDefault(value, fallback) {
-    const numeric = Number(value);
-    return Number.isFinite(numeric) ? numeric : fallback;
-  }
-
-  function clampNumber(value, min, max, fallback) {
-    const numeric = Number(value);
-    if (!Number.isFinite(numeric)) {
-      return fallback;
-    }
-    return Math.max(min, Math.min(max, numeric));
-  }
-
-  function sendRuntimeMessage(message) {
-    return new Promise((resolve, reject) => {
-      chrome.runtime.sendMessage(message, (response) => {
-        const error = chrome.runtime.lastError;
-        if (error) {
-          reject(error);
-          return;
-        }
-        resolve(response);
-      });
-    });
   }
 })();
