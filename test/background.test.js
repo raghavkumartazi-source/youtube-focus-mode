@@ -1,6 +1,6 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
-const { loadBackground, createChromeStub } = require("./harness");
+const { loadBackground, loadShared, createChromeStub } = require("./harness");
 
 const FOCUS_MS = 25 * 60 * 1000;
 const BREAK_MS = 5 * 60 * 1000;
@@ -45,11 +45,11 @@ test("completeFocusSession credits time, xp, streak, and history", async () => {
   assert.equal(result.stats.xp, 25);
   assert.equal(result.stats.streak, 1);
   assert.equal(result.stats.bestStreak, 1);
-  assert.equal(result.stats.lastFocusDate, new Date().toISOString().slice(0, 10));
+  assert.equal(result.stats.lastFocusDate, loadShared().getTodayKey());
   assert.equal(result.stats.lastCompletedSessionId, "session-1");
 
   const stored = (await chrome.storage.local.get("yfmStats")).yfmStats;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = loadShared().getTodayKey();
   assert.equal(stored.history[today].sessions, 1);
   assert.equal(stored.history[today].xp, 25);
   assert.equal(stored.history[today].studyMs, FOCUS_MS);
@@ -236,7 +236,7 @@ test("resetDailyStatsIfNeeded is a no-op on the same day", async () => {
   const { chrome, background } = setup();
   await chrome.storage.local.set({
     yfmStats: {
-      date: new Date().toISOString().slice(0, 10),
+      date: loadShared().getTodayKey(),
       totalStudyMsToday: 5000,
       focusSessionsToday: 3,
       history: {}

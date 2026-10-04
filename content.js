@@ -168,6 +168,12 @@
     const style = document.createElement("style");
     style.id = "yfm-page-style";
     style.textContent = `
+      html[data-yfm-grayscale="on"] video,
+      html[data-yfm-grayscale="on"] ytd-thumbnail img,
+      html[data-yfm-grayscale="on"] yt-thumbnail-view-model img {
+        filter: grayscale(1) !important;
+      }
+
       html[data-yfm-study-mode="on"] ytd-rich-section-renderer:has(a[href^="/shorts"]),
       html[data-yfm-study-mode="on"] ytd-rich-item-renderer:has(a[href^="/shorts"]),
       html[data-yfm-study-mode="on"] ytd-video-renderer:has(a[href^="/shorts"]),
@@ -367,6 +373,7 @@
 
     try {
       document.documentElement.dataset.yfmStudyMode = settings.studyMode ? "on" : "off";
+      document.documentElement.dataset.yfmGrayscale = settings.studyMode && settings.grayscale ? "on" : "off";
 
       if (!settings.studyMode) {
         restoreHiddenElements();

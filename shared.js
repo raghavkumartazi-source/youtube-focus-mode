@@ -12,6 +12,7 @@ const STORAGE_KEYS = {
 const DEFAULT_SETTINGS = {
   studyMode: true,
   widgetEnabled: true,
+  grayscale: false,
   hideShorts: true,
   hideSidebar: true,
   hideHomeFeed: true,
@@ -95,6 +96,7 @@ function normalizeSettings(settings = {}) {
     ...DEFAULT_SETTINGS,
     ...settings,
     strictMode: Boolean(settings.strictMode),
+    grayscale: Boolean(settings.grayscale),
     widgetEnabled: settings.widgetEnabled !== false,
     blockScreen: settings.blockScreen !== false,
     notificationsEnabled: settings.notificationsEnabled !== false,
