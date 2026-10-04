@@ -103,7 +103,7 @@ There are **two ways** to install YouTube Focus Mode.
 
 **Recommended for normal users.**
 
-1. Download the latest release from the project's **Releases** page.
+1. Download the repository ZIP from **Code → Download ZIP**, or a tested extension ZIP from **Actions → CI → Artifacts** when CI succeeds.
 2. Extract the downloaded `.zip` file.
 3. Open Chrome.
 4. Go to:
@@ -160,7 +160,7 @@ Want to modify the extension or contribute to the project?
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/youtube-focus-mode.git
+git clone https://github.com/raghavkumartazi-source/youtube-focus-mode.git
 cd youtube-focus-mode
 ```
 
@@ -175,10 +175,10 @@ npm install
 ### 3. Build the extension
 
 ```bash
-npm run build
+npm run package
 ```
 
-If the project does not require a build step, skip this step.
+There is no JavaScript build step. Packaging requires Python 3 and creates a ZIP in `dist/`.
 
 ### 4. Load the extension in Chrome
 
@@ -192,7 +192,7 @@ Then:
 
 1. Enable **Developer mode**
 2. Click **Load unpacked**
-3. Select the project's extension/build folder
+3. Select the unpacked project folder containing manifest.json
 4. Open YouTube
 5. Turn on **Focus Mode**
 
@@ -459,3 +459,9 @@ Made with ❤️ for students and deep workers.
 ⭐ Star the project if it helps you focus.
 
 </div>
+
+## Validation and packaging
+
+Run `npm run check`. CI tests UTC, Asia/Kolkata and America/Los_Angeles and packages only Chrome runtime files. Stats use your local calendar day. Grayscale is optional, works only while Study Mode is on, and affects videos/thumbnails rather than the focus controls.
+
+No GitHub Release is currently published. Use the source ZIP or CI artifacts to load the extension unpacked. A YouTube layout change can still require browser verification.

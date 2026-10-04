@@ -23,6 +23,7 @@ const els = {
   autoStartNextFocus: document.getElementById("autoStartNextFocus"),
   ambientSound: document.getElementById("ambientSound"),
   ambientVolume: document.getElementById("ambientVolume"),
+  grayscale: document.getElementById("grayscale"),
   hideShorts: document.getElementById("hideShorts"),
   hideSidebar: document.getElementById("hideSidebar"),
   hideHomeFeed: document.getElementById("hideHomeFeed"),
@@ -87,6 +88,7 @@ async function hydrateState() {
 function bindEvents() {
   const settingInputs = [
     "studyMode",
+    "grayscale",
     "hideShorts",
     "hideSidebar",
     "hideHomeFeed",
@@ -166,6 +168,7 @@ function render() {
   els.ambientVolume.value = state.settings.ambientVolume;
 
   for (const id of [
+    "grayscale",
     "hideShorts",
     "hideSidebar",
     "hideHomeFeed",

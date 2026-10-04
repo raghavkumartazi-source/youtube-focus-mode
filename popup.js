@@ -29,6 +29,7 @@ const els = {
   reportXp: document.getElementById("reportXp"),
   reportGoal: document.getElementById("reportGoal"),
   syncStatus: document.getElementById("syncStatus"),
+  grayscale: document.getElementById("grayscale"),
   hideShorts: document.getElementById("hideShorts"),
   hideSidebar: document.getElementById("hideSidebar"),
   hideHomeFeed: document.getElementById("hideHomeFeed"),
@@ -104,7 +105,7 @@ function bindEvents() {
     updateSettings({ studyMode: els.studyModeToggle.checked });
   });
 
-  for (const id of ["hideShorts", "hideSidebar", "hideHomeFeed", "blockAutoplay", "hideComments", "strictMode", "widgetEnabled"]) {
+  for (const id of ["grayscale", "hideShorts", "hideSidebar", "hideHomeFeed", "blockAutoplay", "hideComments", "strictMode", "widgetEnabled"]) {
     els[id].addEventListener("change", () => {
       updateSettings({ [id]: els[id].checked });
     });
@@ -144,6 +145,7 @@ function render() {
   els.studyModeToggle.checked = state.settings.studyMode;
   els.modeLabel.textContent = state.settings.studyMode ? "Study Mode ON" : "Study Mode OFF";
   els.widgetHiddenPanel.hidden = state.settings.widgetEnabled || !state.settings.studyMode;
+  els.grayscale.checked = state.settings.grayscale;
   els.hideShorts.checked = state.settings.hideShorts;
   els.hideSidebar.checked = state.settings.hideSidebar;
   els.hideHomeFeed.checked = state.settings.hideHomeFeed;

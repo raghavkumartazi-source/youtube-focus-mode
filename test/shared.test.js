@@ -258,3 +258,17 @@ test("quote helpers always return a real string", () => {
   assert.ok(WIDGET_QUOTES.includes(getWidgetQuote()));
   assert.ok(POPUP_QUOTES.includes(getPopupQuote()));
 });
+
+
+test("grayscale defaults off and survives settings normalization", () => {
+  const shared = loadShared();
+  assert.equal(shared.normalizeSettings().grayscale, false);
+  assert.equal(shared.normalizeSettings({ grayscale: true }).grayscale, true);
+});
+
+test("calendar keys use local midnight, including leap days", () => {
+  const shared = loadShared();
+  assert.equal(shared.getTodayKey(new Date(2024, 1, 29, 0, 1)), "2024-02-29");
+  assert.equal(shared.getTodayKey(new Date(2024, 1, 29, 23, 59)), "2024-02-29");
+  assert.equal(shared.getPreviousDayKey("2024-03-01"), "2024-02-29");
+});
